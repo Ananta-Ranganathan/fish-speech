@@ -3,7 +3,7 @@ import base64
 import json
 from pathlib import Path
 
-import pyaudio
+#import pyaudio
 import requests
 
 
@@ -23,7 +23,7 @@ def read_ref_text(ref_text):
             return file.read()
     return ref_text
 
-
+'''
 def play_audio(audio_content, format, channels, rate):
     p = pyaudio.PyAudio()
     stream = p.open(format=format, channels=channels, rate=rate, output=True)
@@ -31,6 +31,8 @@ def play_audio(audio_content, format, channels, rate):
     stream.stop_stream()
     stream.close()
     p.terminate()
+'''
+
 
 
 if __name__ == "__main__":
@@ -69,7 +71,7 @@ if __name__ == "__main__":
         help="Maximum new tokens to generate",
     )
     parser.add_argument(
-        "--chunk_length", type=int, default=100, help="Chunk length for synthesis"
+        "--chunk_length", type=int, default=500, help="Chunk length for synthesis"
     )
     parser.add_argument(
         "--top_p", type=float, default=0.7, help="Top-p sampling for synthesis"
@@ -118,12 +120,17 @@ if __name__ == "__main__":
         "format": args.format,
         "streaming": args.streaming,
     }
-
+    import time
+    t0 = time.time()
     response = requests.post(args.url, json=data, stream=args.streaming)
 
-    audio_format = pyaudio.paInt16  # Assuming 16-bit PCM format
+    # audio_format = pyaudio.paInt16  # Assuming 16-bit PCM format
 
     if response.status_code == 200:
+        print(time.time() - t0, " seconds to get response.")
+        with open("generated_audio.wav", "wb") as audio_file:
+            audio_file.write(response.content)
+        ''' 
         if args.streaming:
             p = pyaudio.PyAudio()
             stream = p.open(
@@ -135,14 +142,17 @@ if __name__ == "__main__":
             stream.stop_stream()
             stream.close()
             p.terminate()
+            
         else:
             audio_content = response.content
-
+            
             with open("generated_audio.wav", "wb") as audio_file:
                 audio_file.write(audio_content)
 
+
             play_audio(audio_content, audio_format, args.channels, args.rate)
             print("Audio has been saved to 'generated_audio.wav'.")
+        '''
     else:
         print(f"Request failed with status code {response.status_code}")
         print(response.json())

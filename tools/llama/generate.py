@@ -32,6 +32,7 @@ from fish_speech.models.text2semantic.llama import (
     DualARTransformer,
     NaiveTransformer,
 )
+first_run = True
 
 
 def multinomial_sample_one_no_sync(
@@ -387,6 +388,7 @@ def generate_long(
     prompt_text: Optional[str | list[str]] = None,
     prompt_tokens: Optional[torch.Tensor | list[torch.Tensor]] = None,
 ):
+    global first_run
     assert 0 < top_p <= 1, "top_p must be in (0, 1]"
     assert 0 < repetition_penalty < 2, "repetition_penalty must be in (0, 2)"
     assert 0 < temperature < 2, "temperature must be in (0, 2)"
@@ -492,8 +494,9 @@ def generate_long(
                 repetition_penalty=repetition_penalty,
             )
 
-            if sample_idx == 0 and seg_idx == 0 and compile:
-                logger.info(f"Compilation time: {time.perf_counter() - t0:.2f} seconds")
+            if first_run and compile:
+                logger.info(f"First run time, including compilation: {time.perf_counter() - t0:.2f} seconds")
+                first_run = False
 
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
@@ -629,7 +632,6 @@ def main(
     iterative_prompt: bool,
     chunk_length: int,
 ) -> None:
-
     precision = torch.half if half else torch.bfloat16
 
     if prompt_text is not None and len(prompt_text) != len(prompt_tokens):
