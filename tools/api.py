@@ -3,6 +3,7 @@ import io
 import json
 import queue
 import random
+import sys
 import traceback
 import wave
 from argparse import ArgumentParser
@@ -10,11 +11,11 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 
-import librosa
 import numpy as np
 import pyrootutils
 import soundfile as sf
 import torch
+import torchaudio
 from kui.asgi import (
     Body,
     HTTPException,
@@ -32,6 +33,7 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 # from fish_speech.models.vqgan.lit_module import VQGAN
 from fish_speech.models.vqgan.modules.firefly import FireflyArchitecture
+from fish_speech.utils import autocast_exclude_mps
 from tools.auto_rerank import batch_asr, calculate_wer, is_chinese, load_model
 from tools.llama.generate import (
     GenerateRequest,
@@ -86,7 +88,18 @@ def load_audio(reference_audio, sr):
         except base64.binascii.Error:
             raise ValueError("Invalid path or base64 string")
 
-    audio, _ = librosa.load(reference_audio, sr=sr, mono=True)
+    waveform, original_sr = torchaudio.load(
+        reference_audio, backend="sox" if sys.platform == "linux" else "soundfile"
+    )
+
+    if waveform.shape[0] > 1:
+        waveform = torch.mean(waveform, dim=0, keepdim=True)
+
+    if original_sr != sr:
+        resampler = torchaudio.transforms.Resample(orig_freq=original_sr, new_freq=sr)
+        waveform = resampler(waveform)
+
+    audio = waveform.squeeze().numpy()
     return audio
 
 
@@ -266,7 +279,7 @@ def inference(req: InvokeRequest):
         if result.action == "next":
             break
 
-        with torch.autocast(
+        with autocast_exclude_mps(
             device_type=decoder_model.device.type, dtype=args.precision
         ):
             fake_audios = decode_vq_tokens(
