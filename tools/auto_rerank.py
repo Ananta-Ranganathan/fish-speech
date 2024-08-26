@@ -27,7 +27,7 @@ def load_model(*, device="cuda"):
 
 
 @torch.no_grad()
-def batch_asr_internal(model: WhisperModel, audios, sr):
+def batch_asr_internal(model: WhisperModel, language: str, audios, sr: int):
     resampled_audios = []
     for audio in audios:
 
@@ -47,7 +47,7 @@ def batch_asr_internal(model: WhisperModel, audios, sr):
     for resampled_audio in resampled_audios:
         segments, info = model.transcribe(
             resampled_audio,
-            language=None,
+            language=language,
             beam_size=5,
             initial_prompt="Punctuation is needed in any language.",
         )
@@ -91,15 +91,11 @@ def batch_asr_internal(model: WhisperModel, audios, sr):
 global_lock = Lock()
 
 
-def batch_asr(model, audios, sr):
-    return batch_asr_internal(model, audios, sr)
+def batch_asr(model, language, audios, sr):
+    return batch_asr_internal(model, language, audios, sr)
 
 
-def is_chinese(text):
-    return True
-
-
-def calculate_wer(text1, text2, debug=False):
+def calculate_wer(text1,  text2, debug=False):
     chars1 = remove_punctuation(text1)
     chars2 = remove_punctuation(text2)
 

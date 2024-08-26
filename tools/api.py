@@ -204,6 +204,7 @@ class InvokeRequest(BaseModel):
     ref_json: Optional[str] = "ref_data.json"
     ref_base: Optional[str] = "ref_data"
     speaker: Optional[str] = None
+    language: Optional[str] = "en"
 
 
 def get_content_type(audio_format):
@@ -319,7 +320,6 @@ def inference(req: InvokeRequest):
 
 def auto_rerank_inference(req: InvokeRequest, use_auto_rerank: bool = True):
     if not use_auto_rerank:
-        # 如果不使用 auto_rerank，直接调用原始的 inference 函数
         return inference(req)
 
     whisper_model = load_model()
@@ -328,12 +328,11 @@ def auto_rerank_inference(req: InvokeRequest, use_auto_rerank: bool = True):
     best_audio = None
 
     for attempt in range(max_attempts):
-        # 调用原始的 inference 函数
         audio_generator = inference(req)
         fake_audios = next(audio_generator)
 
         asr_result = batch_asr(
-            whisper_model, [fake_audios], 44100
+            whisper_model, req.language, [fake_audios], 44100
         )[0]
         wer = calculate_wer(req.text, asr_result["text"])
 
@@ -498,6 +497,7 @@ if __name__ == "__main__":
                 format="wav",
                 ref_base=None,
                 ref_json=None,
+                language="en",
             )
         )
     )
