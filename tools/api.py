@@ -43,6 +43,7 @@ from tools.llama.generate import (
 )
 from tools.vqgan.inference import load_model as load_decoder_model
 
+cache = {}
 
 def wav_chunk_header(sample_rate=44100, bit_depth=16, channels=1):
     buffer = io.BytesIO()
@@ -89,7 +90,7 @@ def load_audio(reference_audio, sr):
             raise ValueError("Invalid path or base64 string")
 
     waveform, original_sr = torchaudio.load(
-        reference_audio, backend="sox" if sys.platform == "linux" else "soundfile"
+        reference_audio, backend="soundfile"
     )
 
     if waveform.shape[0] > 1:
@@ -219,6 +220,10 @@ def get_content_type(audio_format):
 @torch.inference_mode()
 def inference(req: InvokeRequest):
     # Parse reference audio aka prompt
+    # Initialize a cache for prompt tokens at the API level
+    if not hasattr(cache, 'prompt_token_cache'):
+        cache['prompt_token_cache'] = {}
+
     prompt_tokens = None
 
     ref_data = load_json(req.ref_json)
@@ -235,11 +240,16 @@ def inference(req: InvokeRequest):
         logger.info("ref_text: " + ref_text)
 
     # Parse reference audio aka prompt
-    prompt_tokens = encode_reference(
-        decoder_model=decoder_model,
-        reference_audio=req.reference_audio,
-        enable_reference_audio=req.reference_audio is not None,
-    )
+    if req.reference_audio in cache['prompt_token_cache']:
+        prompt_tokens = cache['prompt_token_cache'][req.reference_audio]
+    else:
+        prompt_tokens = encode_reference(
+            decoder_model=decoder_model,
+            reference_audio=req.reference_audio,
+            enable_reference_audio=req.reference_audio is not None,
+        )
+        # Cache the encoded tokens at the API level
+        cache['prompt_token_cache'][req.reference_audio] = prompt_tokens
     logger.info(f"ref_text: {req.reference_text}")
     # LLAMA Inference
     request = dict(
@@ -312,7 +322,7 @@ def auto_rerank_inference(req: InvokeRequest, use_auto_rerank: bool = True):
         # 如果不使用 auto_rerank，直接调用原始的 inference 函数
         return inference(req)
 
-    zh_model, en_model = load_model()
+    whisper_model = load_model()
     max_attempts = 5
     best_wer = float("inf")
     best_audio = None
@@ -323,10 +333,12 @@ def auto_rerank_inference(req: InvokeRequest, use_auto_rerank: bool = True):
         fake_audios = next(audio_generator)
 
         asr_result = batch_asr(
-            zh_model if is_chinese(req.text) else en_model, [fake_audios], 44100
+            whisper_model, [fake_audios], 44100
         )[0]
         wer = calculate_wer(req.text, asr_result["text"])
 
+        logger.info(f"WER: {wer}")
+        
         if wer <= 0.1 and not asr_result["huge_gap"]:
             return fake_audios
 
@@ -378,7 +390,7 @@ async def api_invoke_model(
             content_type=get_content_type(req.format),
         )
     else:
-        fake_audios = next(inference(req))
+        fake_audios = auto_rerank_inference(req)
         buffer = io.BytesIO()
         sf.write(
             buffer,

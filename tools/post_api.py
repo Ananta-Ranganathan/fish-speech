@@ -72,7 +72,7 @@ if __name__ == "__main__":
         help="Maximum new tokens to generate",
     )
     parser.add_argument(
-        "--chunk_length", type=int, default=500, help="Chunk length for synthesis"
+        "--chunk_length", type=int, default=100, help="Chunk length for synthesis"
     )
     parser.add_argument(
         "--top_p", type=float, default=0.7, help="Top-p sampling for synthesis"
@@ -128,46 +128,9 @@ if __name__ == "__main__":
     # audio_format = pyaudio.paInt16  # Assuming 16-bit PCM format
 
     if response.status_code == 200:
-        print(time.time() - t0, " seconds to get response.")
         with open("generated_audio.wav", "wb") as audio_file:
             audio_file.write(response.content)
-        ''' 
-        if args.streaming:
-            p = pyaudio.PyAudio()
-            stream = p.open(
-                format=audio_format, channels=args.channels, rate=args.rate, output=True
-            )
-
-            wf = wave.open("generated_audio.wav", "wb")
-            wf.setnchannels(args.channels)
-            wf.setsampwidth(p.get_sample_size(audio_format))
-            wf.setframerate(args.rate)
-
-            stream_stopped_flag = False
-
-            try:
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        stream.write(chunk)
-                        wf.writeframesraw(chunk)
-                    else:
-                        if not stream_stopped_flag:
-                            stream.stop_stream()
-                            stream_stopped_flag = True
-            finally:
-                stream.close()
-                p.terminate()
-                wf.close()
-        else:
-            audio_content = response.content
-            
-            with open("generated_audio.wav", "wb") as audio_file:
-                audio_file.write(audio_content)
-
-
-            play_audio(audio_content, audio_format, args.channels, args.rate)
-            print("Audio has been saved to 'generated_audio.wav'.")
-        '''
+        print(time.time() - t0, " seconds to complete request.")
     else:
         print(f"Request failed with status code {response.status_code}")
         print(response.json())
